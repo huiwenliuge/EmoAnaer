@@ -57,11 +57,11 @@ class RNNet{
         double** ro2h;
 
         double sigm(double x){
-            return 1.0/(1.0+exp(-x));
+            return 16.0/(1.0+exp(-x/16.0));
         }
 
         double dsigm(double x){
-            return sigm(x)*(1.0-sigm(x));
+            return sigm(x)*(1.0-sigm(x)/16.0)/16.0;
         }
         
         

@@ -40,8 +40,8 @@ inline int retLenUTF8(const char* head){
 inline int hFuncUTF8(const char* head){
     int lenUTF8=retLenUTF8(head);
 
-    if(lenUTF8 < 2){
-        int ch=(unsigned int)head[0];
+    if(lenUTF8 < 3){
+        int ch=(unsigned char)head[0];
         ch=ch%64;
         return ch*32*64;
 
