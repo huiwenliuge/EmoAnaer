@@ -614,7 +614,7 @@ double RNNet::_Forward_CROSSENTROPY_SingleTask(RNNet* rnn,Sentence* sen,int n){
         g_mutex.unlock();
         tsen = gonext(tsen,num);
         //std::cout<<tsen->schar<<std::endl;
-        //rnn->_Forward_CROSSENTROPY(tsen);
+        rnn->_Forward_CROSSENTROPY(tsen);
     }
     return 0;
 }
@@ -630,7 +630,7 @@ void RNNet::_Backward_CROSSENTROPY_SingleTask(RNNet* rnn,Sentence* sen,int n){
         rnn->flag--;
         g_mutex.unlock();
         tsen = gonext(tsen,num);
-        //rnn->_Backward_CROSSENTROPY(tsen);
+        rnn->_Backward_CROSSENTROPY(tsen);
     }
 }
 
