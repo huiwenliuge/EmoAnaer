@@ -95,7 +95,7 @@ Sentence RNNet::FetchSent(const char* pathRoot){
     int i,j,len,pathrootlen;
     FILE* sentfp;
     char* line=(char*)calloc(sizeof(char),421);
-
+    totnum = 0;
     pathrootlen=strlen(pathRoot);
     for(i=0;i<EMOTIONNUM;++i){
         filelist[i]=(char*)calloc(sizeof(char),101);
@@ -111,7 +111,8 @@ Sentence RNNet::FetchSent(const char* pathRoot){
 
             len=strLenUTF8(line);
             Sentence sentunit=(Sentence)malloc(sizeof(struct sentence));
-
+            sentunit->num = totnum;
+            totnum++;
             sentunit->schar=line;
             sentunit->tlen=len;
             sentunit->inVec=crtInvec(line,featureNUM,ccdict);
@@ -146,15 +147,15 @@ Sentence RNNet::FetchSent(const char* pathRoot){
             
             line=(char*)calloc(sizeof(char),421);
         }
-        
+        fclose(sentfp);
 
     }
 
     for(i=0;i<EMOTIONNUM;++i)
         free(filelist[i]);
-    fclose(sentfp);
+    //fclose(sentfp);
     free(filelist);
-
+    std::cout<< totnum <<std::endl;
     return sent;
 
 }
@@ -304,21 +305,21 @@ double RNNet::RNNForward_CROSSENTROPY_Nthread(const char* pathRoot,int Nthread){
     FreeSen();
     Sentence sentmp=FetchSent(psen);
     free(psen);
-
-    //while(true){
-    //    std::cout<<"KKK"<<std::endl;
-    std::thread* th[Nthread];
+    flag = totnum-1;
+    
+    std::thread th[Nthread];
     int n;
+    // for(n=0;n<Nthread;++n){
+    //     th[n]=std::thread(init_thread,n);
+    // }
+    // for(n=0;n<Nthread;++n)
+    //     th[n].join();
     for(n=0;n<Nthread;++n){
-        th[n]=new std::thread(_Forward_CROSSENTROPY_SingleTask,\
+        th[n]=std::thread(_Forward_CROSSENTROPY_SingleTask,\
             this,&sentmp,n);
     }
     for(n=0;n<Nthread;++n)
-        th[n]->join();
-    for(n=0;n<Nthread;++n)
-        delete th[n];
-    //free(th);
-   // }
+        th[n].join();
     return 0;
 }
 
@@ -380,20 +381,24 @@ void RNNet::RNNBackward_CROSSENTROPY_Nthread(double lnrts,int Nthread){
     for(i=0;i<EMOTIONNUM;++i)
         memset(DLDk2out[i],'\0',sizeof(double)*hidlayerNUM);
 
-    Sentence sentmp = sent;
-
-    std::thread* th[Nthread];
+    Sentence stmp = sent;
+    
+    flag = totnum-1;
+    std::thread th[Nthread];
     int n;
-
+    // for(n=0;n<Nthread;++n){
+    //     th[n]=std::thread(init_thread,n);
+    // }
+    // for(n=0;n<Nthread;++n)
+    //     th[n].join();
     for(n=0;n<Nthread;++n){
-        th[n]=new std::thread(_Backward_CROSSENTROPY_SingleTask,\
-                this,&sentmp,n);
+       th[n]=std::thread(_Backward_CROSSENTROPY_SingleTask,\
+               this,&stmp,n);
     }
 
+
     for(n=0;n<Nthread;++n)
-        th[n]->join();
-    for(n=0;n<Nthread;++n)
-        delete th[n];
+        th[n].join();
 
     int j;
     for(i=0;i<hidlayerNUM;++i){
@@ -589,29 +594,43 @@ void RNNet::_Backward_CROSSENTROPY(Sentence sen){
     
 }
 
+Sentence gonext(Sentence sen,long target){
+    long start = sen->num;
+    Sentence ret=sen;
+    for(;start>target;--start)
+        sen = sen->next;
+    return sen;
+}
+
 double RNNet::_Forward_CROSSENTROPY_SingleTask(RNNet* rnn,Sentence* sen,int n){
-    Sentence tsen;
-    static std::mutex g_mutex;
-    while(*sen!=NULL){
+    Sentence tsen = *sen;
+    long num = tsen->num;
+    std::mutex g_mutex;
+    while( rnn->flag > -1){
         g_mutex.lock();
-        tsen=*sen;
-        *sen=tsen->next;
+        num = rnn->flag;
+        //printf("%ld\n",num);
+        rnn->flag--;
         g_mutex.unlock();
-      //  std::cout<< tsen->schar<<n<<"\n";
-        rnn->_Forward_CROSSENTROPY(tsen);
+        tsen = gonext(tsen,num);
+        //std::cout<<tsen->schar<<std::endl;
+        //rnn->_Forward_CROSSENTROPY(tsen);
     }
     return 0;
 }
 
 void RNNet::_Backward_CROSSENTROPY_SingleTask(RNNet* rnn,Sentence* sen,int n){
-    Sentence tsen;
-    static std::mutex g_mutex;
-    while(*sen!=NULL){
+    Sentence tsen = *sen;
+    std::mutex g_mutex;
+    long num = tsen->num;
+    while(rnn->flag > -1){
         g_mutex.lock();
-        tsen=*sen;
-        *sen=tsen->next;
+        num = rnn->flag;
+        //printf("%ld\n",num);
+        rnn->flag--;
         g_mutex.unlock();
-        rnn->_Backward_CROSSENTROPY(tsen);
+        tsen = gonext(tsen,num);
+        //rnn->_Backward_CROSSENTROPY(tsen);
     }
 }
 
@@ -720,4 +739,8 @@ void RNNet::prtSent(const char* path){
         tmp=tmp->next;
     }
 
+}
+
+void RNNet::init_thread(int n){
+    std::cout<<"thread\n";
 }

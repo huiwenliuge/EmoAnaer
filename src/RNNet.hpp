@@ -7,11 +7,16 @@
 #include <cmath>
 #include <thread>
 #include <mutex>
+#include <chrono>
+#include <atomic>
 #include "DictCreate.hpp"
 
 #define EMOTIONNUM 7
 
+
+
 struct sentence{
+    long num;
     char* schar;
     int tlen;
     double** inVec;
@@ -64,23 +69,25 @@ class RNNet{
             return sigm(x)*(1.0-sigm(x));
         }
         
-        
-
+        //static std::atomic<Sentence> asent;
     private:
         int featureNUM;
         int hidlayerNUM;
         int DictSize;
         double lnrt;
-        
+        long flag;
+        long totnum;
         double** DLDin2hid;
         double** DLDk2out;
         double** DLDrh2h;
         double** DLDro2h;
-
+        
         Sentence sent;
         Sentence FetchSent(const char* pathRoot);
         ChUTF8* FetchDict(const char* pathRoot);
         void FetchPara(const char* pathRoot);
+        
+        static void init_thread(int n);
         
         double _Forward_CROSSENTROPY(Sentence sen);
         static double _Forward_CROSSENTROPY_SingleTask(RNNet* rnn,Sentence* sen,int n);
