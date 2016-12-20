@@ -309,17 +309,14 @@ double RNNet::RNNForward_CROSSENTROPY_Nthread(const char* pathRoot,int Nthread){
     
     std::thread th[Nthread];
     int n;
-    // for(n=0;n<Nthread;++n){
-    //     th[n]=std::thread(init_thread,n);
-    // }
-    // for(n=0;n<Nthread;++n)
-    //     th[n].join();
+   
     for(n=0;n<Nthread;++n){
         th[n]=std::thread(_Forward_CROSSENTROPY_SingleTask,\
             this,&sentmp,n);
     }
     for(n=0;n<Nthread;++n)
         th[n].join();
+    
     return 0;
 }
 
@@ -386,20 +383,15 @@ void RNNet::RNNBackward_CROSSENTROPY_Nthread(double lnrts,int Nthread){
     flag = totnum-1;
     std::thread th[Nthread];
     int n;
-    // for(n=0;n<Nthread;++n){
-    //     th[n]=std::thread(init_thread,n);
-    // }
-    // for(n=0;n<Nthread;++n)
-    //     th[n].join();
+    
     for(n=0;n<Nthread;++n){
        th[n]=std::thread(_Backward_CROSSENTROPY_SingleTask,\
                this,&stmp,n);
     }
 
-
-    for(n=0;n<Nthread;++n)
+    for(n=0;n<Nthread;++n){
         th[n].join();
-
+    }
     int j;
     for(i=0;i<hidlayerNUM;++i){
         for(j=0;j<featureNUM;++j){
@@ -544,10 +536,11 @@ void RNNet::_Backward_CROSSENTROPY(Sentence sen){
     }
     
     double plnrt = lnrt/sen->tlen;
+    static std::mutex g_mutex;
+    g_mutex.lock();
     upgradeDict(ccdict,sen->schar,sen->DLDx,featureNUM,plnrt);    
-    
+    g_mutex.unlock();
     double pder;
-    
     for(i=0;i<EMOTIONNUM;++i){
         for(j=0;j<hidlayerNUM;++j){
             pder=0.0;
@@ -555,7 +548,9 @@ void RNNet::_Backward_CROSSENTROPY(Sentence sen){
                 pder+=sen->DLDo[t][i]*sen->kLayer[t][j];
             }
             pder/=sen->tlen;
-            DLDk2out[i][j]=pder/sen->tlen;         
+            g_mutex.lock();
+            DLDk2out[i][j]=pder/sen->tlen;
+            g_mutex.unlock();
         }
     }
     
@@ -566,7 +561,9 @@ void RNNet::_Backward_CROSSENTROPY(Sentence sen){
                 pder+=sen->DLDh[t][i]*sen->inVec[t][j];
             }
             pder/=sen->tlen;
+            g_mutex.lock();
             DLDin2hid[i][j]+=pder;
+            g_mutex.unlock();
         }
     }
 
@@ -577,7 +574,9 @@ void RNNet::_Backward_CROSSENTROPY(Sentence sen){
                 pder+=sen->DLDh[t][i]*sen->kLayer[t-1][j];
             }
             pder/=sen->tlen;
+            g_mutex.lock();
             DLDrh2h[i][j]+=pder;
+            g_mutex.unlock();
         }
     }
 
@@ -588,18 +587,21 @@ void RNNet::_Backward_CROSSENTROPY(Sentence sen){
                 pder+=sen->DLDh[t][i]*sen->outLay[t-1][j];
             }
             pder/=sen->tlen;
+            g_mutex.lock();
             DLDro2h[i][j]+=pder;
+            g_mutex.unlock();
         }
     }
     
 }
 
 Sentence gonext(Sentence sen,long target){
-    long start = sen->num;
     Sentence ret=sen;
-    for(;start>target;--start)
-        sen = sen->next;
-    return sen;
+    if(target < 0) return NULL;
+    while(ret->num>target){
+        ret = ret->next;
+    }
+    return ret;
 }
 
 double RNNet::_Forward_CROSSENTROPY_SingleTask(RNNet* rnn,Sentence* sen,int n){
@@ -613,8 +615,10 @@ double RNNet::_Forward_CROSSENTROPY_SingleTask(RNNet* rnn,Sentence* sen,int n){
         rnn->flag--;
         g_mutex.unlock();
         tsen = gonext(tsen,num);
-        //std::cout<<tsen->schar<<std::endl;
-        rnn->_Forward_CROSSENTROPY(tsen);
+        if(tsen!=NULL){
+            //std::cout<<tsen->schar<<std::endl;
+            rnn->_Forward_CROSSENTROPY(tsen);
+        }
     }
     return 0;
 }
@@ -630,7 +634,9 @@ void RNNet::_Backward_CROSSENTROPY_SingleTask(RNNet* rnn,Sentence* sen,int n){
         rnn->flag--;
         g_mutex.unlock();
         tsen = gonext(tsen,num);
-        rnn->_Backward_CROSSENTROPY(tsen);
+        if(tsen!=NULL){
+            rnn->_Backward_CROSSENTROPY(tsen);
+        }
     }
 }
 
@@ -706,29 +712,29 @@ void RNNet::prtSent(const char* path){
     while(tmp){
         fprintf(fp,"{\n");
         fprintf(fp,"%s %d\ninVec:{\n",tmp->schar,tmp->tlen);
-        for(i=0;i<tmp->tlen;++i){
-            for(j=0;j<featureNUM;++j)
-                fprintf(fp,"%f ",tmp->inVec[i][j]);
-            fprintf(fp,"\n");
-        }
-        fprintf(fp,"}\nhidLay:{\n");
-        for(i=0;i<tmp->tlen;++i){
-            for(j=0;j<hidlayerNUM;++j)
-                fprintf(fp,"%f ",tmp->hidLay[i][j]);
-            fprintf(fp,"\n");
-        }
-        fprintf(fp,"}\nkLayer:{\n");
-        for(i=0;i<tmp->tlen;++i){
-            for(j=0;j<hidlayerNUM;++j)
-                fprintf(fp,"%f ",tmp->kLayer[i][j]);
-            fprintf(fp,"\n");
-        }
-        fprintf(fp,"}\noutLay:{\n");
-        for(i=0;i<tmp->tlen;++i){
-            for(j=0;j<EMOTIONNUM;++j)
-                fprintf(fp,"%f ",tmp->outLay[i][j]);
-            fprintf(fp,"\n");
-        }
+        // for(i=0;i<tmp->tlen;++i){
+        //     for(j=0;j<featureNUM;++j)
+        //         fprintf(fp,"%f ",tmp->inVec[i][j]);
+        //     fprintf(fp,"\n");
+        // }
+        // fprintf(fp,"}\nhidLay:{\n");
+        // for(i=0;i<tmp->tlen;++i){
+        //     for(j=0;j<hidlayerNUM;++j)
+        //         fprintf(fp,"%f ",tmp->hidLay[i][j]);
+        //     fprintf(fp,"\n");
+        // }
+        // fprintf(fp,"}\nkLayer:{\n");
+        // for(i=0;i<tmp->tlen;++i){
+        //     for(j=0;j<hidlayerNUM;++j)
+        //         fprintf(fp,"%f ",tmp->kLayer[i][j]);
+        //     fprintf(fp,"\n");
+        // }
+        // fprintf(fp,"}\noutLay:{\n");
+        // for(i=0;i<tmp->tlen;++i){
+        //     for(j=0;j<EMOTIONNUM;++j)
+        //         fprintf(fp,"%f ",tmp->outLay[i][j]);
+        //     fprintf(fp,"\n");
+        // }
         fprintf(fp,"}\neng:{\n");
         for(j=0;j<EMOTIONNUM;++j)
             fprintf(fp,"%f ",tmp->eng[j]);
